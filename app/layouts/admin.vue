@@ -71,7 +71,7 @@ const links = [
     },
   ],
 ] satisfies NavigationMenuItem[][];
-
+//
 const groups = computed(() => [
   {
     id: "links",
