@@ -1,9 +1,4 @@
 <script setup lang="ts">
-declare global {
-  interface Window {
-    Audioloom: any;
-  }
-}
 import type { NavigationMenuItem } from "@nuxt/ui";
 const navOpen = ref(false);
 

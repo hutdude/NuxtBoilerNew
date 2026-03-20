@@ -1,6 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ["@nuxt/eslint", "@nuxt/ui", "nuxt-auth-utils"],
+  modules: [
+    "@nuxt/eslint",
+    "@nuxt/ui",
+    "nuxt-auth-utils",
+    "nuxt-studio",
+    "@nuxt/content",
+    "@builder.io/sdk-vue/nuxt",
+  ],
 
   icon: {
     customCollections: [
@@ -22,6 +29,18 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: "2025-01-15",
+
+  // https://nuxt.com/docs/4.x/guide/going-further/runtime-config
+  // Defaults here; override at runtime with NUXT_PUBLIC_* (e.g. .env — not read by built server alone).
+  runtimeConfig: {
+    public: {
+      audioloom: {
+        scriptSrc: "https://assets.audioloom.com/storefront/audioloom.js",
+        clientId: "",
+        creatorId: "",
+      },
+    },
+  },
 
   eslint: {
     config: {

@@ -1,10 +1,25 @@
 <script setup lang="ts">
+import type {
+  CommandPaletteItem,
+  CommandPaletteGroup,
+  NavigationMenuItem,
+} from "@nuxt/ui";
+
 const route = useRoute();
-const toast = useToast();
+
+const { waitForProducts, products } = useAudioloom();
+
+onMounted(() => {
+  void waitForProducts();
+});
 
 const open = ref(false);
 
-const links = [
+// keeps audioloom panel active on dynamic routes
+const isAudioloomSection = (path: string) =>
+  path === "/admin/audioloom" || path.startsWith("/admin/audioloom/");
+
+const links = computed<NavigationMenuItem[][]>(() => [
   [
     {
       label: "Home",
@@ -17,8 +32,9 @@ const links = [
     {
       label: "Audioloom",
       icon: "i-custom-audioloom",
-      to: "/admin/inbox",
-      badge: "4",
+      to: "/admin/audioloom",
+      badge: products.value.length ? String(products.value.length) : undefined,
+      active: isAudioloomSection(route.path),
       onSelect: () => {
         open.value = false;
       },
@@ -35,7 +51,7 @@ const links = [
       label: "Settings",
       to: "/admin/settings",
       icon: "i-lucide-settings",
-      defaultOpen: true,    
+      defaultOpen: true,
       type: "trigger",
       children: [
         {
@@ -70,28 +86,31 @@ const links = [
       ],
     },
   ],
-] satisfies NavigationMenuItem[][];
-//
-const groups = computed(() => [
-  {
-    id: "links",
-    label: "Go to",
-    items: links.flat(),
-  },
-  {
-    id: "code",
-    label: "Code",
-    items: [
-      {
-        id: "source",
-        label: "View page source",
-        icon: "i-simple-icons-github",
-        to: `https://github.com/nuxt-ui-templates/dashboard/blob/main/app/pages${route.path === "/" ? "/index" : route.path}.vue`,
-        target: "_blank",
-      },
-    ],
-  },
 ]);
+
+const groups = computed((): CommandPaletteGroup<CommandPaletteItem>[] => {
+  const out: CommandPaletteGroup<CommandPaletteItem>[] = [
+    {
+      id: "links",
+      label: "Go to",
+      // NavigationMenuItem is a superset; palette items differ on `chip` typing.
+      items: links.value.flat() as CommandPaletteItem[],
+    },
+  ];
+  if (products.value.length > 0) {
+    out.push({
+      id: "products",
+      label: "Products",
+      items: products.value.map((product) => ({
+        id: product.id,
+        label: product.name,
+        icon: "i-lucide-package",
+        to: `/admin/audioloom/${product.id}`,
+      })),
+    });
+  }
+  return out;
+});
 </script>
 
 <template>
@@ -117,14 +136,6 @@ const groups = computed(() => [
           tooltip
           popover
         />
-
-        <UNavigationMenu
-          :collapsed="collapsed"
-          :items="links[1]"
-          orientation="vertical"
-          tooltip
-          class="mt-auto"
-        />
       </template>
 
       <template #footer="{ collapsed }">
@@ -132,7 +143,7 @@ const groups = computed(() => [
       </template>
     </UDashboardSidebar>
 
-    <UDashboardSearch :groups="groups" />
+    <UDashboardSearch :groups="groups" :fuse="{ resultLimit: 42 }" />
 
     <slot />
 

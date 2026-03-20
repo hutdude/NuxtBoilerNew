@@ -58,3 +58,40 @@ pnpm preview
 ```
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+
+## Authentication (DB-backed email + password)
+
+This template uses `nuxt-auth-utils` sessions (sealed/encrypted cookie) for logged-in state, but it verifies your credentials against a Postgres `users` table.
+
+### Required `users` table
+
+```sql
+-- If you want UUID primary keys
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL UNIQUE,
+  password_hash text NOT NULL,
+  name text NOT NULL,
+  avatar_url text NULL
+);
+```
+
+### Seed the first admin user (no registration UI yet)
+
+1. Install runtime dependency locally (so you can generate hashes):
+   - `npm i argon2`
+2. Generate an Argon2 hash for your chosen password:
+
+```bash
+node -e "import argon2 from 'argon2'; (async () => { const hash = await argon2.hash('iamtheadmin'); console.log(hash); })();"
+```
+
+3. Insert the user (replace `PASSWORD_HASH` with the output from the command):
+
+```sql
+INSERT INTO users (email, password_hash, name, avatar_url)
+VALUES ('admin@admin.com', 'PASSWORD_HASH', 'John Doe', NULL);
+```
+

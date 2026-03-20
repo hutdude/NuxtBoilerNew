@@ -1,0 +1,17 @@
+export type AudioloomPricingConfiguration = {
+  id: string
+  name: string
+  originalPrice: { EUR: number; USD: number }
+  price: { EUR: number; USD: number }
+  hasDiscount: boolean
+}
+
+export type AudioloomProduct = {
+  id: string
+  name: string
+  tagline: string
+  description: string
+  iconUrl: string
+  pricingConfiguration: AudioloomPricingConfiguration
+  type: "product"
+}
