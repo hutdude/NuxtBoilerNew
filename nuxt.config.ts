@@ -6,8 +6,11 @@ export default defineNuxtConfig({
     "nuxt-auth-utils",
     "nuxt-studio",
     "@nuxt/content",
-    "@builder.io/sdk-vue/nuxt",
   ],
+
+  studio: {
+    route: "/admin",
+  },
 
   icon: {
     customCollections: [

@@ -37,5 +37,12 @@ export default defineEventHandler(async (event) => {
     },
   });
 
+  await setStudioUserSession(event, {
+    name: user.name,
+    email: user.email,
+    providerId: user.id,
+    ...(user.avatarUrl ? { avatar: user.avatarUrl } : {}),
+  });
+
   return {};
 });

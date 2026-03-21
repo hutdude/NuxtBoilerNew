@@ -4,6 +4,16 @@
       <NuxtLink to="/">
         <AppLogo class="w-auto h-6 shrink-0" />
       </NuxtLink>
+
+      <nav class="ml-6 flex items-center gap-4 text-sm font-medium">
+        <NuxtLink
+          to="/about"
+          class="text-muted hover:text-default transition-colors"
+          active-class="text-default"
+        >
+          About
+        </NuxtLink>
+      </nav>
     </template>
 
     <template #right>
