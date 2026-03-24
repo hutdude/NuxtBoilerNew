@@ -1,9 +1,158 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from "@nuxt/ui";
+import type {
+  MergedAudioloomBundle,
+  MergedAudioloomProduct,
+} from "../../../types/audioloom-catalog";
+
 const navOpen = ref(false);
 
-const { getMergedProductsByType, hasAudioLoomData, hasProductData, getAllBundles } =
-  useAudioLoomIntegration();
+const {
+  catalogReady,
+  visibleMergedProducts,
+  visibleMergedBundles,
+} = useAudioloomCatalog();
+
+/** Card row for nav dropdowns + `UiNavProductItem` (expects slug, href, image, names). */
+type NavbarCatalogItem = {
+  id: string;
+  slug: string;
+  name: string;
+  dynamicName: string;
+  href: string;
+  image: string;
+  iconUrl: string;
+  kind: "product" | "bundle";
+  sortKey: number;
+};
+
+const NAV_PRIORITY_IDS = [
+  "black-friday-bundle",
+  "subtec",
+  "cactus-clipper-bundle",
+] as const;
+
+function slugFromSdkProduct(p: MergedAudioloomProduct): string {
+  const ext = p as Record<string, unknown>;
+  const s = ext.slug;
+  if (typeof s === "string" && s.length > 0) {
+    return s;
+  }
+  return p.id;
+}
+
+/**
+ * Old merge split "plugin" vs "sample" from JSON. The SDK may expose extra fields at runtime;
+ * if none match, no products are classified as samples (only bundles + non-sample products in Plugins).
+ */
+function isSampleProduct(p: MergedAudioloomProduct): boolean {
+  const ext = p as Record<string, unknown>;
+  const t = ext.productSubType ?? ext.subType ?? ext.category ?? ext.listingCategory;
+  if (t === "sample" || t === "samples") {
+    return true;
+  }
+  if (ext.isSample === true) {
+    return true;
+  }
+  const tags = ext.tags;
+  if (
+    Array.isArray(tags)
+    && tags.some((x) => String(x).toLowerCase() === "sample")
+  ) {
+    return true;
+  }
+  if (typeof tags === "string" && tags.toLowerCase().includes("sample")) {
+    return true;
+  }
+  return false;
+}
+
+function bundleHref(b: MergedAudioloomBundle): string {
+  return b.id === "cactus-clipper-bundle"
+    ? "/plugins/cactus-clipper"
+    : `/bundles/${b.id}`;
+}
+
+function toNavItemFromProduct(
+  p: MergedAudioloomProduct,
+  href: string,
+): NavbarCatalogItem {
+  const slug = slugFromSdkProduct(p);
+  return {
+    id: p.id,
+    slug,
+    name: p.name,
+    dynamicName: p.name,
+    href,
+    image: p.iconUrl,
+    iconUrl: p.iconUrl,
+    kind: "product",
+    sortKey: p.site.sortOrder ?? 999,
+  };
+}
+
+function toNavItemFromBundle(b: MergedAudioloomBundle): NavbarCatalogItem {
+  return {
+    id: b.id,
+    slug: b.id,
+    name: b.name,
+    dynamicName: b.name,
+    href: bundleHref(b),
+    image: b.iconUrl,
+    iconUrl: b.iconUrl,
+    kind: "bundle",
+    sortKey: b.site.sortOrder ?? 999,
+  };
+}
+
+function applyNavPriority(items: NavbarCatalogItem[]): NavbarCatalogItem[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const priority: NavbarCatalogItem[] = [];
+  for (const id of NAV_PRIORITY_IDS) {
+    const it = byId.get(id);
+    if (it) {
+      priority.push(it);
+    }
+  }
+  const priorityIds = new Set(priority.map((i) => i.id));
+  const rest = items.filter((i) => !priorityIds.has(i.id));
+  rest.sort((a, b) => {
+    if (a.sortKey !== b.sortKey) {
+      return a.sortKey - b.sortKey;
+    }
+    return a.name.localeCompare(b.name);
+  });
+  return [...priority, ...rest];
+}
+
+// Plugins dropdown: visible storefront products (non-sample) + bundles; DB `sortOrder` + legacy pin order
+const navPluginsAndBundles = computed((): NavbarCatalogItem[] => {
+  if (!catalogReady.value) {
+    return [];
+  }
+  const plugins = visibleMergedProducts.value
+    .filter((p) => !isSampleProduct(p))
+    .map((p) =>
+      toNavItemFromProduct(p, `/plugins/${slugFromSdkProduct(p)}`),
+    );
+  const bundles = visibleMergedBundles.value.map(toNavItemFromBundle);
+  return applyNavPriority([...plugins, ...bundles]);
+});
+
+const navSamples = computed((): NavbarCatalogItem[] => {
+  if (!catalogReady.value) {
+    return [];
+  }
+  return visibleMergedProducts.value
+    .filter(isSampleProduct)
+    .map((p) => toNavItemFromProduct(p, `/samples/${slugFromSdkProduct(p)}`))
+    .sort((a, b) => {
+      if (a.sortKey !== b.sortKey) {
+        return a.sortKey - b.sortKey;
+      }
+      return a.name.localeCompare(b.name);
+    });
+});
 
 const route = useRoute();
 interface User {
@@ -19,122 +168,20 @@ watch(active, (newActive) => {
   navOpen.value = !!newActive;
 });
 
-// Create computed properties for products to avoid duplicate calls
-const availablePlugins = computed(() => {
-  const plugins = getMergedProductsByType("plugin").filter(
-    (plugin) => plugin.available,
-  );
-  return plugins;
-});
-
-const allSamples = computed(() => {
-  const samples = getMergedProductsByType("sample");
-  return samples;
-});
-
-// Get all bundles
-const allBundles = computed(() => getAllBundles());
-
-
-// Combined plugins and bundles for the plugins dropdown, sorted by sort-id
-const combinedPluginsAndBundles = computed(() => {
-  const plugins = availablePlugins.value.map(plugin => ({
-    ...plugin,
-    type: 'plugin' as const,
-    sortId: (plugin as any)['sort-id'] || 999, // Default sort-id for plugins without it
-    href: plugin.href
-  }));
-  
-  const bundles = allBundles.value.map(bundle => ({
-    ...bundle,
-    id: parseInt(bundle.id) || 999, // Convert string id to number
-    type: 'bundle' as const,
-    sortId: bundle['sort-id'] || 999, // Default sort-id for bundles without it
-    href: bundle.slug === 'cactus-clipper-bundle' ? '/plugins/cactus-clipper' : `/bundles/${bundle.slug}`,
-    dynamicName: bundle.name,
-    dynamicDescription: bundle.description,
-    freeTrialDownloadLink: '',
-    iconUrl: bundle.image,
-    pricing: bundle.pricing ? {
-      id: bundle.pricing.pricingConfiguration.id,
-      name: bundle.pricing.pricingConfiguration.name,
-      originalPrice: bundle.pricing.pricingConfiguration.originalPrice,
-      price: bundle.pricing.pricingConfiguration.price,
-      hasDiscount: bundle.pricing.pricingConfiguration.hasDiscount
-    } : null,
-    // Add missing properties for MergedProduct compatibility
-    price: `$${bundle.originalPrice}`,
-    salePrice: bundle.savings > 0 ? `$${bundle.salePrice}` : undefined,
-    tags: ['bundle', 'discount'],
-    featuredFeatures: [
-      `All ${bundle.includedProducts.length} plugins included`,
-      `${bundle.savingsPercentage}% savings`,
-      'Complete collection',
-    ],
-    features: []
-  }));
-  
-  // Combine and prioritize specific items
-  const combined = [...plugins, ...bundles];
-  
-  // Find priority items: black-friday-bundle first, then subtec, then cactus-clipper-bundle
-  const blackFridayBundle = combined.find(item => item.slug === "black-friday-bundle");
-  const subtecPlugin = combined.find(item => item.slug === "subtec");
-  const cactusBundle = combined.find(item => item.slug === "cactus-clipper-bundle");
-  const otherItems = combined.filter(
-    item => item.slug !== "black-friday-bundle" && item.slug !== "subtec" && item.slug !== "cactus-clipper-bundle"
-  );
-  
-  // Build priority order
-  const priorityItems = [];
-  if (blackFridayBundle) priorityItems.push(blackFridayBundle);
-  if (subtecPlugin) priorityItems.push(subtecPlugin);
-  if (cactusBundle) priorityItems.push(cactusBundle);
-  
-  return [...priorityItems, ...otherItems.sort((a, b) => a.sortId - b.sortId)];
-});
-
-// Memoize the product arrays to prevent unnecessary re-computations
-const memoizedPlugins = computed(() => {
-  if (!pluginsLoaded.value) return [];
-  return combinedPluginsAndBundles.value;
-});
-
-const memoizedSamples = computed(() => {
-  if (!samplesLoaded.value) return [];
-  return allSamples.value;
-});
-
-// Pre-load product data to avoid re-rendering
-const pluginsLoaded = ref(false);
-const samplesLoaded = ref(false);
-
-// Watch for product data and mark as loaded
-watch(
-  hasProductData,
-  (hasData) => {
-    if (hasData) {
-      pluginsLoaded.value = true;
-      samplesLoaded.value = true;
-    }
-  },
-  { immediate: true },
-);
-
 // Preload images for better performance
 const preloadImages = () => {
-  if (!hasProductData.value) return;
+  if (!catalogReady.value) {
+    return;
+  }
 
-  // Preload plugin and bundle images
-  combinedPluginsAndBundles.value.forEach((item) => {
+  navPluginsAndBundles.value.forEach((item) => {
     if (item.image && item.image !== "Product Image") {
       const img = new Image();
       img.src = item.image;
     }
   });
 
-  // Preload sample images
-  allSamples.value.forEach((sample) => {
+  navSamples.value.forEach((sample) => {
     if (sample.image && sample.image !== "Product Image") {
       const img = new Image();
       img.src = sample.image;
@@ -142,12 +189,10 @@ const preloadImages = () => {
   });
 };
 
-// Preload images when data is available
 watch(
-  hasProductData,
-  (hasData) => {
-    if (hasData) {
-      // Small delay to ensure DOM is ready
+  catalogReady,
+  (ready) => {
+    if (ready) {
       nextTick(() => {
         preloadImages();
       });
@@ -167,13 +212,11 @@ const items = computed<NavigationMenuItem[]>(() => [
     active: false,
     slot: "plugins" as const,
     children: [
-      // Dynamic plugin and bundle links from JSON - sorted by sort-id
-      ...combinedPluginsAndBundles.value.map((item) => ({
+      ...navPluginsAndBundles.value.map((item) => ({
         label: item.dynamicName || item.name,
         to: item.href,
         active: route.path.startsWith(item.href),
       })),
-      // Separator and "View All" option
     ],
   },
 
@@ -183,13 +226,11 @@ const items = computed<NavigationMenuItem[]>(() => [
     active: false,
     slot: "samples" as const,
     children: [
-      // Dynamic sample links from JSON
-      ...allSamples.value.map((sample) => ({
+      ...navSamples.value.map((sample) => ({
         label: sample.dynamicName || sample.name,
         to: sample.href,
         active: route.path.startsWith(sample.href),
       })),
-      // Separator and "View All" option
     ],
   },
 
@@ -267,7 +308,7 @@ const closeNavigation = () => {
             >
               <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4 h-fit">
                 <!-- Product Items or Loading Skeletons -->
-                <template v-if="!pluginsLoaded">
+                <template v-if="!catalogReady">
                   <div
                     v-for="(_, index) in loadingPlugins"
                     :key="`loading-plugin-${index}`"
@@ -279,8 +320,8 @@ const closeNavigation = () => {
 
                 <template v-else>
                   <div
-                    v-for="plugin in memoizedPlugins"
-                    :key="plugin.slug"
+                    v-for="plugin in navPluginsAndBundles"
+                    :key="plugin.id"
                     class="flex-shrink-0"
                   >
                     <UiNavProductItem
@@ -300,7 +341,7 @@ const closeNavigation = () => {
             >
               <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <!-- Product Items or Loading Skeletons -->
-                <template v-if="!samplesLoaded">
+                <template v-if="!catalogReady">
                   <div
                     v-for="(_, index) in loadingSamples"
                     :key="`loading-sample-${index}`"
@@ -312,8 +353,8 @@ const closeNavigation = () => {
 
                 <template v-else>
                   <div
-                    v-for="sample in memoizedSamples"
-                    :key="sample.slug"
+                    v-for="sample in navSamples"
+                    :key="sample.id"
                     class="flex-shrink-0"
                   >
                     <UiNavProductItem
@@ -329,10 +370,12 @@ const closeNavigation = () => {
       </ClientOnly>
     </template>
 
-    <BrandLogo class="h-8" />
+    <NuxtLink to="/">
+      <AppLogo class="w-auto h-6 shrink-0" />
+    </NuxtLink>
 
     <template #right>
-      <div className="flex justify-center gap-2">
+      <div class="flex justify-center gap-2">
         <UButton
           label="login"
           size="lg"
@@ -362,7 +405,7 @@ const closeNavigation = () => {
         <!-- Navigation Menu -->
         <div class="flex-grow">
           <!-- Mobile Product Sections -->
-          <div class="p-2 space-y-6 j">
+          <div class="p-2 space-y-6">
             <!-- Plugins Section -->
             <div>
               <UCollapsible class="flex flex-col w-full gap-3">
@@ -381,7 +424,7 @@ const closeNavigation = () => {
                 <template #content>
                   <div class="grid grid-cols-2 gap-4 mb-3">
                     <!-- Show loading skeletons initially -->
-                    <template v-if="!pluginsLoaded">
+                    <template v-if="!catalogReady">
                       <div
                         v-for="(_, index) in loadingPlugins"
                         :key="`loading-plugin-${index}`"
@@ -394,8 +437,8 @@ const closeNavigation = () => {
                     <!-- Show actual products once loaded -->
                     <template v-else>
                       <div
-                        v-for="plugin in memoizedPlugins"
-                        :key="plugin.slug"
+                        v-for="plugin in navPluginsAndBundles"
+                        :key="plugin.id"
                         class="flex-shrink-0"
                       >
                         <UiNavProductItem :product="plugin" />
@@ -434,7 +477,7 @@ const closeNavigation = () => {
                 <template #content>
                   <div class="grid grid-cols-2 gap-4 mb-3">
                     <!-- Show loading skeletons initially -->
-                    <template v-if="!samplesLoaded">
+                    <template v-if="!catalogReady">
                       <div
                         v-for="(_, index) in loadingSamples"
                         :key="`loading-sample-${index}`"
@@ -447,8 +490,8 @@ const closeNavigation = () => {
                     <!-- Show actual products once loaded -->
                     <template v-else>
                       <div
-                        v-for="sample in memoizedSamples"
-                        :key="sample.slug"
+                        v-for="sample in navSamples"
+                        :key="sample.id"
                         class="flex-shrink-0"
                       >
                         <UiNavProductItem :product="sample" />

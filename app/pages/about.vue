@@ -1,13 +1,21 @@
 <script setup lang="ts">
-const { data: page } = await useAsyncData("about-page", () =>
-  queryCollection("content").path("/about").first(),
-);
+const { data: page, error } = await useAsyncData("about-page", () =>
+  queryContentFirstByPath("/about"),
+)
+
+if (error.value) {
+  throw createError({
+    statusCode: 503,
+    statusMessage: "Content is temporarily unavailable",
+    cause: error.value,
+  })
+}
 
 if (!page.value) {
   throw createError({
     statusCode: 404,
     statusMessage: "Page not found",
-  });
+  })
 }
 
 useSeoMeta({

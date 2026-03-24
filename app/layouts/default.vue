@@ -1,4 +1,5 @@
 <template>
+  
   <UHeader>
     <template #left>
       <NuxtLink to="/">

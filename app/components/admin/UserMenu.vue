@@ -75,9 +75,11 @@ const items = computed<DropdownMenuItem[][]>(() => {
               chip: color,
               slot: "chip",
               checked: appConfig.ui.colors.primary === color,
+
               type: "checkbox",
               onSelect: (e) => {
                 e.preventDefault();
+                
 
                 appConfig.ui.colors.primary = color;
               },

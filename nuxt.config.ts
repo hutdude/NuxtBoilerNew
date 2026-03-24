@@ -8,9 +8,12 @@ export default defineNuxtConfig({
     "@nuxt/content",
   ],
 
-  studio: {
-    route: "/admin",
-  },
+  components: [
+    {
+      path: "~/components", //globally register all components in the components/contents folder
+      global: true,
+    },
+  ],
 
   icon: {
     customCollections: [
@@ -29,6 +32,8 @@ export default defineNuxtConfig({
 
   routeRules: {
     "/": { prerender: true },
+    // Legacy / Studio: old home.md used path /home; send that to the real index route.
+    "/home": { redirect: { to: "/", statusCode: 302 } },
   },
 
   compatibilityDate: "2025-01-15",

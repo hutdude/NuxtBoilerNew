@@ -1,9 +1,9 @@
 <script setup lang="ts">
-const { user, fetch: fetchSession } = useUserSession();
+const { user } = useUserSession();
+const { performLogout } = useLogout();
 
 async function logout() {
-  await $fetch("/api/logout", { method: "POST" });
-  await fetchSession();
+  await performLogout();
   await navigateTo("/login");
 }
 </script>

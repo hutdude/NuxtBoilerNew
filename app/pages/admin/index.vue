@@ -4,6 +4,8 @@ definePageMeta({
   middleware: ["unauthenticated"],
 });
 
+
+
 const { user } = useUserSession();
 </script>
 

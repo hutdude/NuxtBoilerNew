@@ -2,115 +2,122 @@
 import type {
   CommandPaletteItem,
   CommandPaletteGroup,
-  NavigationMenuItem,
-} from "@nuxt/ui";
+  NavigationMenuItem
+} from '@nuxt/ui'
 
-const route = useRoute();
+const route = useRoute()
 
-const { waitForProducts, products } = useAudioloom();
+const { products, bundles } = useAudioloomCatalog()
 
-onMounted(() => {
-  void waitForProducts();
-});
+const audioloomOfferingsCount = computed(
+  () => products.value.length + bundles.value.length
+)
 
-const open = ref(false);
+const open = ref(false)
 
 // keeps audioloom panel active on dynamic routes
 const isAudioloomSection = (path: string) =>
-  path === "/admin/audioloom" || path.startsWith("/admin/audioloom/");
+  path === '/admin/audioloom' || path.startsWith('/admin/audioloom/')
 
 const links = computed<NavigationMenuItem[][]>(() => [
   [
     {
-      label: "Home",
-      icon: "i-lucide-house",
-      to: "/admin",
+      label: 'Home',
+      icon: 'i-lucide-house',
+      to: '/admin',
       onSelect: () => {
-        open.value = false;
-      },
+        open.value = false
+      }
     },
     {
-      label: "Audioloom",
-      icon: "i-custom-audioloom",
-      to: "/admin/audioloom",
-      badge: products.value.length ? String(products.value.length) : undefined,
+      label: 'Audioloom',
+      icon: 'i-custom-audioloom',
+      to: '/admin/audioloom',
+      badge: audioloomOfferingsCount.value
+        ? String(audioloomOfferingsCount.value)
+        : undefined,
       active: isAudioloomSection(route.path),
       onSelect: () => {
-        open.value = false;
-      },
+        open.value = false
+      }
     },
     {
-      label: "Customers",
-      icon: "i-lucide-users",
-      to: "/admin/customers",
+      label: 'Customers',
+      icon: 'i-lucide-users',
+      to: '/admin/customers',
       onSelect: () => {
-        open.value = false;
-      },
+        open.value = false
+      }
     },
     {
-      label: "Settings",
-      to: "/admin/settings",
-      icon: "i-lucide-settings",
+      label: 'Settings',
+      to: '/admin/settings',
+      icon: 'i-lucide-settings',
       defaultOpen: true,
-      type: "trigger",
+      type: 'trigger',
       children: [
         {
-          label: "General",
-          to: "/admin/settings",
+          label: 'General',
+          to: '/admin/settings',
           exact: true,
           onSelect: () => {
-            open.value = false;
-          },
+            open.value = false
+          }
         },
         {
-          label: "Members",
-          to: "/admin/settings/members",
+          label: 'Notifications',
+          to: '/admin/settings/notifications',
           onSelect: () => {
-            open.value = false;
-          },
+            open.value = false
+          }
         },
         {
-          label: "Notifications",
-          to: "/admin/settings/notifications",
+          label: 'Security',
+          to: '/admin/settings/security',
           onSelect: () => {
-            open.value = false;
-          },
-        },
-        {
-          label: "Security",
-          to: "/admin/settings/security",
-          onSelect: () => {
-            open.value = false;
-          },
-        },
-      ],
-    },
-  ],
-]);
+            open.value = false
+          }
+        }
+      ]
+    }
+  ]
+])
 
 const groups = computed((): CommandPaletteGroup<CommandPaletteItem>[] => {
   const out: CommandPaletteGroup<CommandPaletteItem>[] = [
     {
-      id: "links",
-      label: "Go to",
+      id: 'links',
+      label: 'Go to',
       // NavigationMenuItem is a superset; palette items differ on `chip` typing.
-      items: links.value.flat() as CommandPaletteItem[],
-    },
-  ];
+      items: links.value.flat() as CommandPaletteItem[]
+    }
+  ]
   if (products.value.length > 0) {
     out.push({
-      id: "products",
-      label: "Products",
-      items: products.value.map((product) => ({
-        id: product.id,
+      id: 'products',
+      label: 'Products',
+      items: products.value.map(product => ({
+        id: `p-${product.id}`,
         label: product.name,
-        icon: "i-lucide-package",
-        to: `/admin/audioloom/${product.id}`,
-      })),
-    });
+        icon: 'i-lucide-package',
+        to: `/admin/audioloom/${product.id}`
+      }))
+    })
   }
-  return out;
-});
+  if (bundles.value.length > 0) {
+    out.push({
+      id: 'bundles',
+      label: 'Bundles',
+      items: bundles.value.map(bundle => ({
+        id: `b-${bundle.id}`,
+        label: bundle.name,
+        icon: 'i-lucide-layers',
+        to: `/admin/audioloom/${bundle.id}`
+      }))
+    })
+  }
+  return out
+})
 </script>
 
 <template>
@@ -143,7 +150,10 @@ const groups = computed((): CommandPaletteGroup<CommandPaletteItem>[] => {
       </template>
     </UDashboardSidebar>
 
-    <UDashboardSearch :groups="groups" :fuse="{ resultLimit: 42 }" />
+    <UDashboardSearch
+      :groups="groups"
+      :fuse="{ resultLimit: 42 }"
+    />
 
     <slot />
 

@@ -2,6 +2,7 @@
  * Client-only AudioLoom storefront SDK: wait for the script (see plugins/audioloom.client.ts), then call setup().
  */
 
+import type { AudioloomBundle } from "../../types/audioloom-bundle";
 import type { AudioloomProduct } from "../../types/audioloom-product";
 
 function defaultStoreUi(): Record<string, unknown> {
@@ -67,8 +68,16 @@ export function useAudioloom() {
     () => [],
   );
 
-  const products = computed(() => productsState.value);
+  /** Bundles from `getBundles()` — separate from single products. */
+  const bundlesState = useState<AudioloomBundle[]>(
+    "audioloom-bundles",
+    () => [],
+  );
 
+  const products = computed(() => productsState.value);
+  const bundles = computed(() => bundlesState.value);
+
+  // Wait for the AudioLoom SDK to be ready
   async function whenReady(timeoutMs = 15000): Promise<void> {
     if (import.meta.server) {
       return;
@@ -95,7 +104,11 @@ export function useAudioloom() {
     return getSdk()?.getProducts();
   }
 
-  /** Pull the latest list from `window.Audioloom.getProducts()` into `products`. */
+  function getBundles(): unknown[] | undefined {
+    return getSdk()?.getBundles?.();
+  }
+
+  // Pull the latest list from `window.Audioloom.getProducts()` into `products`.
   function refreshProducts(): void {
     if (import.meta.server) {
       return;
@@ -104,11 +117,30 @@ export function useAudioloom() {
     productsState.value = (list ?? []) as AudioloomProduct[];
   }
 
+  // Pull the latest list from `window.Audioloom.getBundles()` into `bundles`.
+  function refreshBundles(): void {
+    if (import.meta.server) {
+      return;
+    }
+    const list = getBundles();
+    bundlesState.value = (list ?? []) as AudioloomBundle[];
+  }
+
+  // Get a product by id or slug
   function getProduct(idOrSlug: string): AudioloomProduct | undefined {
     return productsState.value.find(
       (p) =>
         p.id === idOrSlug ||
         String((p as Record<string, unknown>).slug ?? "") === idOrSlug,
+    );
+  }
+
+  // Get a bundle by id or slug
+  function getBundle(idOrSlug: string): AudioloomBundle | undefined {
+    return bundlesState.value.find(
+      (b) =>
+        b.id === idOrSlug ||
+        String((b as Record<string, unknown>).slug ?? "") === idOrSlug,
     );
   }
 
@@ -135,6 +167,33 @@ export function useAudioloom() {
       if (Date.now() - start > timeoutMs) {
         refreshProducts();
         return productsState.value;
+      }
+      await new Promise<void>((r) => setTimeout(r, pollMs));
+    }
+  }
+
+  /**
+   * Resolves when `getBundles()` returns a non-empty array, or after timeout.
+   */
+  async function waitForBundles(options?: {
+    timeoutMs?: number;
+    pollMs?: number;
+  }): Promise<AudioloomBundle[]> {
+    if (import.meta.server) {
+      return [];
+    }
+    const timeoutMs = options?.timeoutMs ?? 15000;
+    const pollMs = options?.pollMs ?? 100;
+    const start = Date.now();
+    for (;;) {
+      const list = getBundles();
+      if (list && list.length > 0) {
+        refreshBundles();
+        return bundlesState.value;
+      }
+      if (Date.now() - start > timeoutMs) {
+        refreshBundles();
+        return bundlesState.value;
       }
       await new Promise<void>((r) => setTimeout(r, pollMs));
     }
@@ -170,19 +229,29 @@ export function useAudioloom() {
     window.Audioloom.setup({ clientId, creatorId }, ui);
     setupComplete.value = true;
     refreshProducts();
+    refreshBundles();
   }
 
   return {
-    /** `true` after `setup()` has run (`Audioloom.setup` called). Not the same as catalog loaded — use `waitForProducts` for that. */
+    /**
+     * `true` after `Audioloom.setup()` has run. Does **not** mean products/bundles or DB metadata are ready —
+     * use `useAudioloomCatalog().catalogReady` (after `syncCatalog()`) for UI that shows merged storefront data.
+     */
     setupComplete: readonly(setupComplete),
     /** Reactive catalog; kept in sync via `refreshProducts`, `waitForProducts`, and `setup`. */
     products,
+    /** Reactive bundles; kept in sync via `refreshBundles`, `waitForBundles`, and `setup`. */
+    bundles,
     whenReady,
     setup,
     getSdk,
     getProducts,
+    getBundles,
     refreshProducts,
+    refreshBundles,
     waitForProducts,
+    waitForBundles,
     getProduct,
+    getBundle,
   };
 }
