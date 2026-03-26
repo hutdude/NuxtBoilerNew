@@ -1,35 +1,6 @@
 <template>
   
-  <UHeader>
-    <template #left>
-      <NuxtLink to="/">
-        <AppLogo class="w-auto h-6 shrink-0" />
-      </NuxtLink>
-
-      <nav class="ml-6 flex items-center gap-4 text-sm font-medium">
-        <NuxtLink
-          to="/about"
-          class="text-muted hover:text-default transition-colors"
-          active-class="text-default"
-        >
-          About
-        </NuxtLink>
-      </nav>
-    </template>
-
-    <template #right>
-      <UColorModeButton />
-
-      <UButton
-        to="https://github.com/nuxt-ui-templates/starter"
-        target="_blank"
-        icon="i-simple-icons-github"
-        aria-label="GitHub"
-        color="neutral"
-        variant="ghost"
-      />
-    </template>
-  </UHeader>
+  <LayoutNavbar />
   <div class="">
     <slot />
   </div>

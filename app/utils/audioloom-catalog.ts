@@ -14,6 +14,7 @@ function siteFromRow(row: AudioloomProductMetadataRow): AudioloomSiteMetadata {
     visible: row.visible,
     sortOrder: row.sortOrder,
     kind: row.kind,
+    productCategory: row.productCategory,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   }
@@ -31,7 +32,8 @@ export function mergeAudioloomProductWithMetadata(
           hasMetadataRow: false,
           visible: false,
           sortOrder: null,
-          kind: 'product'
+          kind: 'product',
+          productCategory: null
         }
   }
 }
@@ -48,7 +50,8 @@ export function mergeAudioloomBundleWithMetadata(
           hasMetadataRow: false,
           visible: false,
           sortOrder: null,
-          kind: 'bundle'
+          kind: 'bundle',
+          productCategory: null
         }
   }
 }

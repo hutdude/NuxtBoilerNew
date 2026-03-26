@@ -1,6 +1,7 @@
 import {
   handlePluginProductAvailabilityLookup,
   parseAudioloomProductIdFromQuery,
+  parseStorefrontContextFromQuery,
 } from "../utils/plugin-product-availability";
 
 /**
@@ -8,6 +9,7 @@ import {
  */
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
+  const storefrontContext = parseStorefrontContextFromQuery(query);
   const audioloomProductId = parseAudioloomProductIdFromQuery(query);
   if (!audioloomProductId) {
     if (import.meta.dev) {
@@ -24,6 +26,7 @@ export default defineEventHandler(async (event) => {
   await handlePluginProductAvailabilityLookup(
     audioloomProductId,
     "plugin-visibility",
+    { storefrontContext },
   );
   return { ok: true as const };
 });

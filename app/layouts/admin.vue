@@ -42,9 +42,9 @@ const links = computed<NavigationMenuItem[][]>(() => [
       }
     },
     {
-      label: 'Customers',
-      icon: 'i-lucide-users',
-      to: '/admin/customers',
+      label: 'Media',
+      icon: 'i-lucide-image',
+      to: '/admin/media',
       onSelect: () => {
         open.value = false
       }

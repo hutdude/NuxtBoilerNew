@@ -4,7 +4,7 @@ definePageMeta({
   middleware: ["product-available"],
 });
 
-const { mergedProducts, mergedBundles, catalogReady } = useAudioloomCatalog();
+const { mergedProducts, catalogReady } = useAudioloomCatalog();
 
 const { loggedIn } = useUserSession();
 
@@ -15,16 +15,13 @@ const slug = computed(() => {
   return typeof raw === "string" && raw.length > 0 ? raw : "";
 });
 
-/** Merged storefront row once catalog + metadata are ready (URL segment = audioloom id). */
+/** Sample-pack product only (URL segment = audioloom id). */
 const productData = computed(() => {
   if (!catalogReady.value) {
     return undefined;
   }
   const id = slug.value;
-  return (
-    mergedProducts.value.find((p) => p.id === id)
-    ?? mergedBundles.value.find((b) => b.id === id)
-  );
+  return mergedProducts.value.find((p) => p.id === id);
 });
 
 const toast = useToast();
@@ -59,13 +56,13 @@ watch(
   { flush: "post" },
 );
 
-const pageKey = computed(() => `plugin-${slug.value}`);
+const pageKey = computed(() => `sample-pack-${slug.value}`);
 
 const { data: page } = await useAsyncData(
   pageKey,
   () =>
     queryCollection("content")
-      .where("stem", "=", `products/plugins/${slug.value}`)
+      .where("stem", "=", `products/sample-packs/${slug.value}`)
       .first(),
   { watch: [slug] },
 );
@@ -73,7 +70,7 @@ const { data: page } = await useAsyncData(
 if (!page.value) {
   throw createError({
     statusCode: 404,
-    statusMessage: "Plugin not found",
+    statusMessage: "Sample pack not found",
   });
 }
 

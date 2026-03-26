@@ -1,4 +1,5 @@
 import type {
+  AudioloomProductCategory,
   AudioloomProductMetadataRow,
   AudioloomStorefrontKind,
 } from "../../../types/audioloom-product-metadata";
@@ -22,10 +23,27 @@ function normalizeRow(
 ): AudioloomProductMetadataRow | null {
   const audioloomProductId = row.audioloomProductId;
   const kind = row.kind;
+  const rawPc = row.productCategory;
   const visible = row.visible;
   const sortOrder = row.sortOrder;
   const createdAt = asIsoTimestamp(row.createdAt);
   const updatedAt = asIsoTimestamp(row.updatedAt);
+
+  let productCategory: AudioloomProductCategory | null;
+  if (rawPc === null || rawPc === undefined) {
+    productCategory = null;
+  } else if (rawPc === "sample-pack" || rawPc === "plugin") {
+    productCategory = rawPc;
+  } else {
+    return null;
+  }
+
+  if (kind === "bundle" && productCategory !== null) {
+    return null;
+  }
+  if (kind === "product" && productCategory === null) {
+    return null;
+  }
 
   if (
     typeof audioloomProductId !== "string" ||
@@ -41,6 +59,7 @@ function normalizeRow(
   return {
     audioloomProductId,
     kind,
+    productCategory,
     visible,
     sortOrder:
       sortOrder === null || typeof sortOrder === "number" ? sortOrder : null,
@@ -54,12 +73,14 @@ export type UpsertProductMetadataInput = {
   visible?: boolean;
   sortOrder?: number | null;
   kind?: AudioloomStorefrontKind;
+  productCategory?: AudioloomProductCategory;
 };
 
 /** Only provided fields are written; row must already exist. */
 export type PatchProductMetadataInput = {
   audioloomProductId: string;
   kind?: AudioloomStorefrontKind;
+  productCategory?: AudioloomProductCategory;
   visible?: boolean;
   sortOrder?: number | null;
 };
@@ -67,6 +88,7 @@ export type PatchProductMetadataInput = {
 function hasPatchFields(input: PatchProductMetadataInput): boolean {
   return (
     input.kind !== undefined ||
+    input.productCategory !== undefined ||
     input.visible !== undefined ||
     input.sortOrder !== undefined
   );
@@ -93,6 +115,14 @@ export async function patchAudioloomProductMetadata(
     setParts.push(`kind = $${n++}`);
     params.push(input.kind);
   }
+  if (input.kind === "bundle") {
+    setParts.push("product_category = NULL");
+  } else if (input.productCategory !== undefined) {
+    setParts.push(`product_category = $${n++}`);
+    params.push(input.productCategory);
+  } else if (input.kind === "product") {
+    setParts.push("product_category = COALESCE(product_category, 'plugin')");
+  }
   if (input.visible !== undefined) {
     setParts.push(`visible = $${n++}`);
     params.push(input.visible);
@@ -113,6 +143,7 @@ export async function patchAudioloomProductMetadata(
     RETURNING
       audioloom_product_id AS "audioloomProductId",
       kind,
+      product_category AS "productCategory",
       visible,
       sort_order AS "sortOrder",
       created_at AS "createdAt",
@@ -147,24 +178,31 @@ export async function upsertAudioloomProductMetadata(
   const visible = input.visible ?? false;
   const sortOrder = input.sortOrder === undefined ? null : input.sortOrder;
   const kind = input.kind ?? "product";
+  const productCategory: AudioloomProductCategory | null =
+    kind === "bundle"
+      ? null
+      : (input.productCategory ?? "plugin");
 
   const rows = (await sql`
-    INSERT INTO audioloom_product_metadata (audioloom_product_id, visible, sort_order, kind, updated_at)
+    INSERT INTO audioloom_product_metadata (audioloom_product_id, visible, sort_order, kind, product_category, updated_at)
     VALUES (
       ${input.audioloomProductId},
       ${visible},
       ${sortOrder},
       ${kind},
+      ${productCategory},
       now()
     )
     ON CONFLICT (audioloom_product_id) DO UPDATE SET
       visible = EXCLUDED.visible,
       sort_order = EXCLUDED.sort_order,
       kind = EXCLUDED.kind,
+      product_category = EXCLUDED.product_category,
       updated_at = now()
     RETURNING
       audioloom_product_id AS "audioloomProductId",
       kind,
+      product_category AS "productCategory",
       visible,
       sort_order AS "sortOrder",
       created_at AS "createdAt",
@@ -194,9 +232,10 @@ export async function insertAudioloomProductMetadataIfMissing(
   audioloomProductId: string,
   kind: AudioloomStorefrontKind,
 ): Promise<void> {
+  const productCategory = kind === "bundle" ? null : "plugin";
   await sql`
-    INSERT INTO audioloom_product_metadata (audioloom_product_id, visible, sort_order, kind, updated_at)
-    VALUES (${audioloomProductId}, false, null, ${kind}, now())
+    INSERT INTO audioloom_product_metadata (audioloom_product_id, visible, sort_order, kind, product_category, updated_at)
+    VALUES (${audioloomProductId}, false, null, ${kind}, ${productCategory}, now())
     ON CONFLICT (audioloom_product_id) DO NOTHING
   `;
 }
@@ -234,6 +273,7 @@ export async function listAudioloomProductMetadata(): Promise<
     SELECT
       audioloom_product_id AS "audioloomProductId",
       kind,
+      product_category AS "productCategory",
       visible,
       sort_order AS "sortOrder",
       created_at AS "createdAt",
@@ -257,6 +297,7 @@ export async function listAudioloomProductMetadataByIds(
     SELECT
       audioloom_product_id AS "audioloomProductId",
       kind,
+      product_category AS "productCategory",
       visible,
       sort_order AS "sortOrder",
       created_at AS "createdAt",
@@ -284,6 +325,7 @@ export async function getAudioloomProductMetadataByAudioloomProductId(
     SELECT
       audioloom_product_id AS "audioloomProductId",
       kind,
+      product_category AS "productCategory",
       visible,
       sort_order AS "sortOrder",
       created_at AS "createdAt",

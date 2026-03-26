@@ -5,15 +5,22 @@ const patchItemSchema = z
   .object({
     audioloomProductId: z.string().min(1),
     kind: z.enum(['product', 'bundle']).optional(),
+    productCategory: z.enum(['sample-pack', 'plugin']).optional(),
     visible: z.boolean().optional(),
     sortOrder: z.union([z.number().int(), z.null()]).optional()
   })
   .refine(
     data =>
       data.kind !== undefined
+      || data.productCategory !== undefined
       || data.visible !== undefined
       || data.sortOrder !== undefined,
-    { message: 'Provide at least one of kind, visible, sortOrder' }
+    { message: 'Provide at least one of kind, productCategory, visible, sortOrder' }
+  )
+  .refine(
+    data =>
+      data.productCategory === undefined || data.kind === 'product',
+    { message: 'productCategory is only valid with kind "product"' }
   )
 
 const bodySchema = z.union([
@@ -33,6 +40,7 @@ export default defineEventHandler(async (event) => {
     items.map(item => ({
       audioloomProductId: item.audioloomProductId,
       kind: item.kind,
+      productCategory: item.productCategory,
       visible: item.visible,
       sortOrder: item.sortOrder
     }))

@@ -6,8 +6,19 @@ export default defineNuxtConfig({
     "nuxt-auth-utils",
     "nuxt-studio",
     "@nuxt/content",
+    "@nuxthub/core",
+    "@nuxt/image",
   ],
 
+  hub: {
+    blob: true,
+  },
+
+  studio: {
+    media: {
+      external: true,
+    },
+  },
   components: [
     {
       path: "~/components", //globally register all components in the components/contents folder

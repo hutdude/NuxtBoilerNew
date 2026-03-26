@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
+import { queryContentFirstByStem } from '~/composables/useContentFirst'
+import { queryProductPdpDoc } from '~/utils/audioloom-product-content'
+
 definePageMeta({
   layout: 'admin',
   middleware: ['unauthenticated']
 })
+
+const pdpExists = ref(false)
 
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
@@ -28,9 +34,42 @@ const selection = computed(() => {
   return null
 })
 
+watch(
+  () => [
+    catalogReady.value,
+    selection.value?.kind,
+    selection.value?.data.id,
+    selection.value?.kind === 'product'
+      ? selection.value.data.site.productCategory
+      : null
+  ] as const,
+  async () => {
+    if (!catalogReady.value || !selection.value) {
+      pdpExists.value = false
+      return
+    }
+    try {
+      if (selection.value.kind === 'bundle') {
+        const doc = await queryContentFirstByStem(
+          `bundle/${selection.value.data.id}`
+        )
+        pdpExists.value = !!doc
+      } else {
+        const doc = await queryProductPdpDoc(selection.value.data.id)
+        pdpExists.value = !!doc
+      }
+    }
+    catch {
+      pdpExists.value = false
+    }
+  },
+  { immediate: true }
+)
+
 const visibility = reactive({ saving: false, error: null as string | null })
 const sortDraft = ref('')
 const sortState = reactive({ saving: false, error: null as string | null })
+const categoryState = reactive({ saving: false, error: null as string | null })
 
 function errMsg(e: unknown): string {
   if (
@@ -86,14 +125,102 @@ const dbMetaLine = computed(() => {
   if (!s.hasMetadataRow) {
     return 'No DB row'
   }
-  return [s.kind, s.visible ? 'on' : 'off'].join(' · ')
+  const parts: string[] = [s.kind ?? '—']
+  if (selection.value?.kind === 'product' && s.productCategory) {
+    parts.push(s.productCategory)
+  }
+  parts.push(s.visible ? 'on' : 'off')
+  return parts.join(' · ')
 })
+
+const storefrontTypeLabel = computed(() => {
+  const sel = selection.value
+  if (!sel || sel.kind !== 'product') {
+    return '—'
+  }
+  return (sel.data.site.productCategory ?? 'plugin') === 'sample-pack'
+    ? 'Sample pack'
+    : 'Plugin'
+})
+
+const storefrontCategoryItems = computed<DropdownMenuItem[][]>(() => {
+  const sel = selection.value
+  if (!sel || sel.kind !== 'product') {
+    return [[]]
+  }
+  return [
+    [
+      {
+        label: 'Plugin',
+        icon: 'i-lucide-puzzle',
+        onSelect: (e: Event) => {
+          e.preventDefault()
+          void setProductCategory('plugin')
+        }
+      },
+      {
+        label: 'Sample pack',
+        icon: 'i-lucide-layers',
+        onSelect: (e: Event) => {
+          e.preventDefault()
+          void setProductCategory('sample-pack')
+        }
+      }
+    ]
+  ]
+})
+
+async function setProductCategory(next: 'sample-pack' | 'plugin') {
+  const sel = selection.value
+  if (!sel || sel.kind !== 'product') {
+    return
+  }
+  const current = sel.data.site.productCategory ?? 'plugin'
+  if (next === current && sel.data.site.hasMetadataRow) {
+    categoryState.error = null
+    return
+  }
+  categoryState.saving = true
+  categoryState.error = null
+  try {
+    if (next !== current) {
+      await $fetch('/api/admin/content-pdp-move', {
+        method: 'POST',
+        body: {
+          id: sel.data.id,
+          productCategory: next
+        }
+      })
+    }
+    if (sel.data.site.hasMetadataRow) {
+      await updateAudioloomMetadata({
+        audioloomProductId: sel.data.id,
+        kind: 'product',
+        productCategory: next
+      })
+    } else {
+      await upsertAudioloomMetadata({
+        audioloomProductId: sel.data.id,
+        kind: 'product',
+        visible: sel.data.site.visible,
+        sortOrder: sel.data.site.sortOrder,
+        productCategory: next
+      })
+    }
+  } catch (e: unknown) {
+    categoryState.error = errMsg(e) || 'Could not update product type'
+  } finally {
+    categoryState.saving = false
+  }
+}
 
 async function commitSortOrder() {
   const sel = selection.value
   if (!sel) {
     return
   }
+
+  // validate entry is a number
   const parsed = parseSortDraft()
   if (!parsed.ok) {
     sortState.error = parsed.message
@@ -101,11 +228,14 @@ async function commitSortOrder() {
   }
   const next = parsed.value
   const current = sel.data.site.sortOrder
+
+  // if same value, do nothing
   if (next === current) {
     sortState.error = null
     return
   }
 
+  
   sortState.saving = true
   sortState.error = null
   const kind = sel.kind === 'bundle' ? 'bundle' : 'product'
@@ -121,7 +251,10 @@ async function commitSortOrder() {
         audioloomProductId: sel.data.id,
         kind,
         visible: sel.data.site.visible,
-        sortOrder: next
+        sortOrder: next,
+        productCategory: sel.kind === 'product'
+          ? (sel.data.site.productCategory ?? 'plugin')
+          : undefined
       })
     }
   } catch (e: unknown) {
@@ -134,6 +267,15 @@ async function commitSortOrder() {
 async function setSiteVisible(next: boolean) {
   const sel = selection.value
   if (!sel) {
+    return
+  }
+  if (!pdpExists.value) {
+    toast.add({
+      title: 'PDP does not exist',
+      description: 'Create a PDP before setting visibility',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
     return
   }
   visibility.saving = true
@@ -153,15 +295,69 @@ async function setSiteVisible(next: boolean) {
 
 const publicPageHref = computed(() => {
   if (!selection.value) {
-    return null
+    return undefined
   }
   if (selection.value.kind === 'bundle') {
     return `/bundles/${selection.value.data.id}`
   }
-  return `/plugins/${selection.value.data.id}`
+  const cat = selection.value.data.site.productCategory ?? 'plugin'
+  return cat === 'sample-pack'
+    ? `/samples/${selection.value.data.id}`
+    : `/plugins/${selection.value.data.id}`
 })
 
 const title = computed(() => selection.value?.data.name ?? 'AudioLoom')
+
+const toast = useToast()
+const createPdpSaving = ref(false)
+
+async function createPdp() {
+  const sel = selection.value
+  if (!sel || createPdpSaving.value) {
+    return
+  }
+  createPdpSaving.value = true
+  try {
+    await $fetch('/api/admin/content-pdp', {
+      method: 'POST',
+      body: {
+        kind: sel.kind === 'bundle' ? 'bundle' : 'product',
+        id: sel.data.id,
+        title: sel.data.name,
+        description: sel.data.description,
+        productCategory:
+          sel.kind === 'product'
+            ? (sel.data.site.productCategory ?? 'plugin')
+            : undefined
+      }
+    })
+    pdpExists.value = true
+    toast.add({
+      title: 'PDP markdown created',
+      description:
+        sel.kind === 'bundle'
+          ? 'File added under content/bundle.'
+          : 'File added under content/products/plugins or content/products/sample-packs.',
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+  }
+  catch (e: unknown) {
+    const status = e && typeof e === 'object' && 'statusCode' in e
+      ? (e as { statusCode?: number }).statusCode
+      : undefined
+    const msg = errMsg(e)
+    toast.add({
+      title: status === 409 ? 'PDP already exists' : 'Could not create PDP',
+      description: msg || undefined,
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+  finally {
+    createPdpSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -173,13 +369,23 @@ const title = computed(() => selection.value?.data.name ?? 'AudioLoom')
         </template>
         <template #right>
           <UButton
-            v-if="publicPageHref"
+            v-if="catalogReady && selection && pdpExists"
             icon="i-lucide-external-link"
             variant="solid"
             :to="publicPageHref"
             target="_blank"
           >
             View product page
+          </UButton>
+          <UButton
+            v-if="catalogReady && selection && !pdpExists"
+            icon="i-lucide-plus"
+            variant="solid"
+            :loading="createPdpSaving"
+            :disabled="createPdpSaving"
+            @click="createPdp"
+          >
+            Create PDP
           </UButton>
           <UButton
             class="cursor-pointer"
@@ -214,6 +420,37 @@ const title = computed(() => selection.value?.data.name ?? 'AudioLoom')
               <span class="text-sm text-muted font-mono tabular-nums">
                 {{ dbMetaLine }}
               </span>
+            </div>
+            <div
+              v-if="selection.kind === 'product'"
+              class="space-y-1 max-w-xs"
+            >
+              <label class="text-sm font-medium text-default">Storefront type</label>
+              <UDropdownMenu
+                :items="storefrontCategoryItems"
+                :content="{ align: 'start', collisionPadding: 12 }"
+                :ui="{ content: 'w-56' }"
+              >
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  trailing-icon="i-lucide-chevrons-up-down"
+                  class="w-full justify-between"
+                  :loading="categoryState.saving"
+                  :disabled="categoryState.saving"
+                >
+                  {{ storefrontTypeLabel }}
+                </UButton>
+              </UDropdownMenu>
+              <p
+                v-if="categoryState.error"
+                class="text-sm text-error"
+              >
+                {{ categoryState.error }}
+              </p>
+              <p class="text-xs text-muted">
+                PDP markdown lives under <code class="text-xs">content/products/plugins</code> or <code class="text-xs">content/products/sample-packs</code>. Changing type moves the file when it already exists.
+              </p>
             </div>
             <div class="space-y-1">
               <USwitch

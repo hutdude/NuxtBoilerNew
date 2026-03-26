@@ -1,6 +1,8 @@
 /**
- * Validates plugin URLs against `audioloom_product_metadata`: row must exist and `visible` must be true.
- * The path segment after `/plugins/` is sent as `audioloom_product_id` (storefront id), not a separate `public_slug` column.
+ * Validates `/plugins/:id` and `/samples/:id` against `audioloom_product_metadata`.
+ * The path segment is the storefront `audioloom_product_id`.
+ * — `/plugins/`: bundles or products with `product_category = plugin`.
+ * — `/samples/`: products with `product_category = sample-pack` only.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
   const { loggedIn } = useUserSession();
@@ -8,7 +10,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return;
   }
 
-  const productSlug = /^\/plugins\/([^/]+)/.exec(to.path)?.[1] ?? "";
+  const pluginMatch = /^\/plugins\/([^/]+)/.exec(to.path);
+  const sampleMatch = /^\/samples\/([^/]+)/.exec(to.path);
+  const productSlug = pluginMatch?.[1] ?? sampleMatch?.[1] ?? "";
+  const storefrontContext = sampleMatch ? "samples" : "plugins";
+
   if (!productSlug) {
     throw createError({
       statusCode: 404,
@@ -21,6 +27,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (import.meta.dev) {
     console.log("[product-available] middleware check", {
       productSlug,
+      storefrontContext,
       path: to.path,
       side: import.meta.server ? "server" : "client",
     });
@@ -28,16 +35,23 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   try {
     await requestFetch("/api/plugins/product-availability", {
-      query: { audioloomProductId: productSlug },
+      query: {
+        audioloomProductId: productSlug,
+        storefrontContext,
+      },
     });
     if (import.meta.dev) {
-      console.log("[product-available] availability ok", { productSlug });
+      console.log("[product-available] availability ok", {
+        productSlug,
+        storefrontContext,
+      });
     }
   } catch (err: unknown) {
     const status = getFetchErrorStatus(err);
     if (import.meta.dev) {
       console.warn("[product-available] fetch failed", {
         productSlug,
+        storefrontContext,
         status,
         err,
         data:

@@ -4,9 +4,14 @@
  */
 export type AudioloomStorefrontKind = "product" | "bundle";
 
+/** Only for `kind === "product"`. Always `null` for bundles. */
+export type AudioloomProductCategory = "sample-pack" | "plugin";
+
 export type AudioloomProductMetadataRow = {
   audioloomProductId: string;
   kind: AudioloomStorefrontKind;
+  /** Set for products only; `null` for bundles. */
+  productCategory: AudioloomProductCategory | null;
   visible: boolean;
   sortOrder: number | null;
   createdAt: string;
@@ -17,6 +22,7 @@ export type AudioloomProductMetadataRow = {
 export type AudioloomMetadataPatchItem = {
   audioloomProductId: string;
   kind?: AudioloomStorefrontKind;
+  productCategory?: AudioloomProductCategory;
   visible?: boolean;
   sortOrder?: number | null;
 };
@@ -36,6 +42,8 @@ export type AudioloomMetadataPatchResult = {
 export type AudioloomMetadataUpsertPayload = {
   audioloomProductId: string;
   kind?: AudioloomStorefrontKind;
+  /** Required logically when `kind` is `"product"`; defaults to `"plugin"` in API if omitted. */
+  productCategory?: AudioloomProductCategory;
   visible?: boolean;
   sortOrder?: number | null;
 };

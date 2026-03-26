@@ -1,12 +1,18 @@
 import { z } from 'zod'
 import { upsertAudioloomProductMetadataMany } from '../../db/queries/audioloom-product-metadata'
 
-const itemSchema = z.object({
-  audioloomProductId: z.string().min(1),
-  kind: z.enum(['product', 'bundle']).optional().default('product'),
-  visible: z.boolean().optional().default(false),
-  sortOrder: z.number().int().nullable().optional()
-})
+const itemSchema = z
+  .object({
+    audioloomProductId: z.string().min(1),
+    kind: z.enum(['product', 'bundle']).optional().default('product'),
+    productCategory: z.enum(['sample-pack', 'plugin']).optional(),
+    visible: z.boolean().optional().default(false),
+    sortOrder: z.number().int().nullable().optional()
+  })
+  .refine(
+    data => data.kind !== 'bundle' || data.productCategory === undefined,
+    { message: 'productCategory must not be set for bundles' }
+  )
 
 const bodySchema = z.union([
   itemSchema,
@@ -25,6 +31,7 @@ export default defineEventHandler(async (event) => {
     items.map(item => ({
       audioloomProductId: item.audioloomProductId,
       kind: item.kind,
+      productCategory: item.productCategory,
       visible: item.visible,
       sortOrder: item.sortOrder
     }))

@@ -13,7 +13,7 @@ const {
   visibleMergedBundles,
 } = useAudioloomCatalog();
 
-/** Card row for nav dropdowns + `UiNavProductItem` (expects slug, href, image, names). */
+/** Card row for nav dropdowns + `LayoutNavProductItem` (expects slug, href, image, names). */
 type NavbarCatalogItem = {
   id: string;
   slug: string;
@@ -42,10 +42,15 @@ function slugFromSdkProduct(p: MergedAudioloomProduct): string {
 }
 
 /**
- * Old merge split "plugin" vs "sample" from JSON. The SDK may expose extra fields at runtime;
- * if none match, no products are classified as samples (only bundles + non-sample products in Plugins).
+ * Prefer `site.productCategory` from Neon (`audioloom_product_metadata`); fall back to SDK heuristics.
  */
 function isSampleProduct(p: MergedAudioloomProduct): boolean {
+  if (p.site.hasMetadataRow && p.site.productCategory === "sample-pack") {
+    return true;
+  }
+  if (p.site.hasMetadataRow && p.site.productCategory === "plugin") {
+    return false;
+  }
   const ext = p as Record<string, unknown>;
   const t = ext.productSubType ?? ext.subType ?? ext.category ?? ext.listingCategory;
   if (t === "sample" || t === "samples") {
@@ -314,7 +319,7 @@ const closeNavigation = () => {
                     :key="`loading-plugin-${index}`"
                     class="flex-shrink-0"
                   >
-                    <UiNavProductItem :loading="true" />
+                    <LayoutNavProductItem :loading="true" />
                   </div>
                 </template>
 
@@ -324,7 +329,7 @@ const closeNavigation = () => {
                     :key="plugin.id"
                     class="flex-shrink-0"
                   >
-                    <UiNavProductItem
+                    <LayoutNavProductItem
                       :product="plugin"
                       @close="closeNavigation"
                     />
@@ -347,7 +352,7 @@ const closeNavigation = () => {
                     :key="`loading-sample-${index}`"
                     class="flex-shrink-0"
                   >
-                    <UiNavProductItem :loading="true" />
+                    <LayoutNavProductItem :loading="true" />
                   </div>
                 </template>
 
@@ -357,7 +362,7 @@ const closeNavigation = () => {
                     :key="sample.id"
                     class="flex-shrink-0"
                   >
-                    <UiNavProductItem
+                    <LayoutNavProductItem
                       :product="sample"
                       @close="closeNavigation"
                     />
@@ -430,7 +435,7 @@ const closeNavigation = () => {
                         :key="`loading-plugin-${index}`"
                         class="flex-shrink-0"
                       >
-                        <UiNavProductItem :loading="true" />
+                        <LayoutNavProductItem :loading="true" />
                       </div>
                     </template>
 
@@ -441,7 +446,7 @@ const closeNavigation = () => {
                         :key="plugin.id"
                         class="flex-shrink-0"
                       >
-                        <UiNavProductItem :product="plugin" />
+                        <LayoutNavProductItem :product="plugin" />
                       </div>
                     </template>
                   </div>
@@ -483,7 +488,7 @@ const closeNavigation = () => {
                         :key="`loading-sample-${index}`"
                         class="flex-shrink-0"
                       >
-                        <UiNavProductItem :loading="true" />
+                        <LayoutNavProductItem :loading="true" />
                       </div>
                     </template>
 
@@ -494,7 +499,7 @@ const closeNavigation = () => {
                         :key="sample.id"
                         class="flex-shrink-0"
                       >
-                        <UiNavProductItem :product="sample" />
+                        <LayoutNavProductItem :product="sample" />
                       </div>
                     </template>
                   </div>

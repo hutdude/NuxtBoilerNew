@@ -36,3 +36,27 @@ export async function queryContentFirstByPath(path: string) {
   }
   throw lastError
 }
+
+/** Same retry semantics as path lookup; matches e.g. `product/foo` for `content/product/foo.md`. */
+export async function queryContentFirstByStem(stem: string) {
+  let lastError: unknown
+  for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
+    const delay = RETRY_DELAYS_MS[i]!
+    if (delay) {
+      await new Promise((r) => setTimeout(r, delay))
+    }
+    try {
+      return await queryCollection("content").where("stem", "=", stem).first()
+    }
+    catch (e) {
+      lastError = e
+      if (!isRetryableContentError(e)) {
+        throw e
+      }
+      if (i === RETRY_DELAYS_MS.length - 1) {
+        throw e
+      }
+    }
+  }
+  throw lastError
+}
